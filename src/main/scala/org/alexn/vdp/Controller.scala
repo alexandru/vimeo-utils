@@ -36,14 +36,15 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(download) =>
       findDownloads(request, uid) { info =>
         if (info.allowDownloads) {
+          val search = name.toLowerCase.trim
           val file = info
-            .sourceFile.find(_.publicName.toLowerCase.trim == name)
-            .orElse(info.files.find(_.publicName.toLowerCase.trim == name))
-            .orElse(info.sourceFile)
-            .orElse(info.files.lastOption)
+            .sourceFile.find(_.publicName.toLowerCase.trim == search)
+            .orElse(info.files.find(_.publicName.toLowerCase.trim == search))
 
           file match {
-            case None => notFound("files list is empty")
+            case None =>
+              notFound(s"file with name $name not found")
+
             case Some(value) =>
               val url = cleanURL(value.downloadURL, download.getOrElse(true))
               logger.info("Serving: " + url)
