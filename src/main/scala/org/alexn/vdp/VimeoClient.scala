@@ -24,6 +24,8 @@ import org.http4s.client.Client
 import org.http4s.headers.Accept
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.util.CaseInsensitiveString
+import org.slf4j.LoggerFactory
+
 import scala.concurrent.duration._
 
 final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[Task] {
@@ -54,6 +56,8 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
         )
         .putHeaders(extra.collect { case Some(h) => h } :_*)
 
+      logger.info("Making request: " + request.toString())
+
       client.fetch(request) {
         case Status.Successful(r) if r.status.code == 200 =>
           /*_*/r.attemptAs[DownloadLinksJSON]/*_*/.leftMap(e => JSONError(e.message)).value
@@ -70,6 +74,8 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
       }
     }
   }
+
+  private[this] lazy val logger = LoggerFactory.getLogger(getClass)
 }
 
 object VimeoClient {
