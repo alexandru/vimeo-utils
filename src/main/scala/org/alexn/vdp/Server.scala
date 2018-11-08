@@ -39,7 +39,7 @@ object Server extends Http4sDsl[Task] {
       controller <- Stream.eval(Controller(vimeo))
 
       // With Middlewares in place
-      httpApp = Logger(true, true)(CORS(AutoSlash(controller.routes)).orNotFound)
+      httpApp = Logger(true, false)(CORS(AutoSlash(controller.routes)).orNotFound)
 
       exitCode <- BlazeServerBuilder[Task]
         .bindHttp(config.http.port, config.http.host)

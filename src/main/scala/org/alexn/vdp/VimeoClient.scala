@@ -24,13 +24,19 @@ import org.http4s.client.Client
 import org.http4s.headers.Accept
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.util.CaseInsensitiveString
+import scala.concurrent.duration._
 
 final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[Task] {
+  private[this] val cache = Cached.unsafe[Either[WebError, DownloadLinksJSON]]()
+
   /**
     * Fetches the download links from Vimeo for a public video with the
     * given `uid` and for which the download is allowed (Plus accounts and up).
     */
-  def getDownloadLinks(uid: String, agent: Option[Header]): Task[Either[WebError, DownloadLinksJSON]] = {
+  def getDownloadLinks(uid: String, exp: FiniteDuration, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] =
+    cache.getOrUpdate(uid + "/" + exp.toMillis.toString, exp, uncachedDownloadLinks(uid, agent, extra:_*))
+
+  private def uncachedDownloadLinks(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] = {
     // For JSON deserialization
     import org.http4s.circe.CirceEntityDecoder._
 
@@ -39,12 +45,14 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
       Accept(MediaType.application.json))
 
     base.flatMap { req =>
-      val request = req.putHeaders(
-        agent.getOrElse(Header("User-Agent", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:63.0) Gecko/20100101 Firefox/63.0")),
-        Header("origin", "https://vimeo.com"),
-        Header("Referer", s"https://vimeo.com/$uid"),
-        Header("x-requested-with", "XMLHttpRequest")
-      )
+      val request = req
+        .putHeaders(
+          Header("origin", "https://vimeo.com"),
+          agent.getOrElse(Header("User-Agent", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:63.0) Gecko/20100101 Firefox/63.0")),
+          Header("Referer", s"https://vimeo.com/$uid"),
+          Header("x-requested-with", "XMLHttpRequest")
+        )
+        .putHeaders(extra.collect { case Some(h) => h } :_*)
 
       client.fetch(request) {
         case Status.Successful(r) if r.status.code == 200 =>

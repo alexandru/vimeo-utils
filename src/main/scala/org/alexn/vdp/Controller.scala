@@ -26,6 +26,7 @@ import org.http4s.{Header, HttpRoutes, Request, Response, Status}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.util.CaseInsensitiveString
 import org.slf4j.LoggerFactory
+import scala.concurrent.duration._
 
 final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
 
@@ -34,7 +35,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       Ok("Pong")
 
     case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(download) =>
-      findDownloads(request, uid) { info =>
+      findDownloads(request, uid, 1.minute) { info =>
         if (info.allowDownloads) {
           val search = name.toLowerCase.trim
           val file = info
@@ -50,6 +51,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
               logger.info("Serving: " + url)
               Response[Task](Status.SeeOther)
                 .putHeaders(Header("Location", url))
+                .putHeaders(Header("Cache-Control", "no-cache"))
           }
         } else {
           notFound("allowDownloads=false")
@@ -57,37 +59,55 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       }
 
     case request @ GET -> Root / "get" / uid =>
-      findDownloads(request, uid) { info =>
+      findDownloads(request, uid, 24.hours) { info =>
         /*_*/
         import circe._
         Response[Task](Status.Ok).withEntity(info.asJson)
+          .putHeaders(Header("Cache-Control", "max-age=86400"))
         /*_*/
       }
   }
 
-  private def findDownloads(request: Request[Task], uid: String)
+  private def findDownloads(request: Request[Task], uid: String, exp: FiniteDuration)
     (f: DownloadLinksJSON => Response[Task]) = {
 
-    val agent = request.headers.get(CaseInsensitiveString("User-Agent"))
+    System.realIP.flatMap { serverIP =>
+      val agent = request.headers.get(CaseInsensitiveString("User-Agent"))
+      val currentForwardedFor =
+        request.headers.get(CaseInsensitiveString("X-Forwarded-For"))
+          .orElse(request.headers.get(CaseInsensitiveString("X-Client-IP")))
+          .orElse(request.headers.get(CaseInsensitiveString("X-ProxyUser-Ip")))
 
-    vimeo.getDownloadLinks(uid, agent).map {
-      case Left(HttpError(status, body, contentType)) =>
-        // Core web-service triggered an HTTP error, mirroring it as is
-        val r = Response[Task](Status.fromInt(status).right.get).withEntity(body)
-        contentType.fold(r)(ct => r.putHeaders(Header("Content-Type", ct)))
+      val forwardedFor = serverIP.filter(_.nonEmpty) match {
+        case None => currentForwardedFor
+        case Some(proxyIP) =>
+          currentForwardedFor match {
+            case None =>
+              request.remoteAddr.map(ip => Header("X-Forwarded-For", ip + ", " + proxyIP))
+            case Some(header) =>
+              Some(Header("X-Forwarded-For", header.value + ", " + proxyIP))
+          }
+      }
 
-      case Left(JSONError(msg)) =>
-        // Exceptions was thrown somewhere, not good
-        logger.warn("Core web service problem — {}", msg)
-        Response[Task](Status.BadGateway).withEntity("502 Bad Gateway (Vimeo)")
+      vimeo.getDownloadLinks(uid, exp, agent, forwardedFor).map {
+        case Left(HttpError(status, body, contentType)) =>
+          // Core web-service triggered an HTTP error, mirroring it as is
+          val r = Response[Task](Status.fromInt(status).right.get).withEntity(body)
+          contentType.fold(r)(ct => r.putHeaders(Header("Content-Type", ct)))
 
-      case Left(error) =>
-        // Exceptions was thrown somewhere, not good
-        logger.warn("Unexpected error: {}", error.toString)
-        Response[Task](Status.InternalServerError).withEntity("500 Internal Server Error")
+        case Left(JSONError(msg)) =>
+          // Exceptions was thrown somewhere, not good
+          logger.warn("Core web service problem — {}", msg)
+          Response[Task](Status.BadGateway).withEntity("502 Bad Gateway (Vimeo)")
 
-      case Right(info) =>
-        f(info)
+        case Left(error) =>
+          // Exceptions was thrown somewhere, not good
+          logger.warn("Unexpected error: {}", error.toString)
+          Response[Task](Status.InternalServerError).withEntity("500 Internal Server Error")
+
+        case Right(info) =>
+          f(info)
+      }
     }
   }
 
