@@ -58,12 +58,15 @@ lazy val root = (project in file("."))
     maintainer := "Alexandru Nedelcu <noreply@alexn.org>",
     packageSummary := "Vimeo Download Plus",
     packageDescription := "A server for discovering and redirecting to Vimeo raw video files",
-    debianPackageDependencies := Seq("openjdk-8-jdk")
+    debianPackageDependencies := Seq("openjdk-8-jdk"),
     /*
     linuxPackageMappings += {
       val file = sourceDirectory.value / "universal" / "application-sample.conf"
       packageMapping( (file, "/etc/oriel-cmp-backend/application-sample.conf") )
     }*/
+
+    // For Heroku deployment
+    herokuAppName in Compile := "vimeodownloadsplus"
   )
 
 scalacOptions ++= Seq(
