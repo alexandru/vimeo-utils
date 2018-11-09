@@ -26,6 +26,9 @@ lazy val root = (project in file("."))
       "io.monix"       %% "monix"                % MonixVersion,
       "ch.qos.logback" %  "logback-classic"      % LogbackVersion,
       "com.typesafe"   %  "config"               % TypesafeConfigVersion,
+      // TODO: remove in the future
+      // https://github.com/http4s/http4s/issues/2259#issuecomment-437152483
+      "org.http4s"     %% "blaze-http"           % "0.14.0-M11"
     ),
     addCompilerPlugin("org.spire-math" %% "kind-projector"     % "0.9.6"),
     addCompilerPlugin("com.olegpy"     %% "better-monadic-for" % "0.2.4"),
