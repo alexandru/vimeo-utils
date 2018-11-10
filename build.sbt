@@ -12,7 +12,7 @@ lazy val root = (project in file("."))
   .settings(
     organization := "org.alexn",
     name := "vimeo-download-plus",
-    version := "0.0.1",
+    version := "0.0.3",
     scalaVersion := "2.12.7",
     scalacOptions ++= Seq("-Ypartial-unification"),
     libraryDependencies ++= Seq(

@@ -17,6 +17,8 @@
 
 package org.alexn.vdp
 
+import java.net.URLEncoder
+
 import io.circe.Printer
 import io.circe.syntax._
 import monix.eval.Task
@@ -79,12 +81,34 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
 
     case request @ GET -> Root / "thumb" / uid =>
       findThumb(request, uid, 24.hours) { info =>
-        info.video.thumbs.base match {
+        val image = info.video.thumbs.image1280
+          .orElse(info.video.thumbs.base)
+
+        image match {
           case None => notFound("video.thumbs.base")
           case Some(url) =>
             logger.info("Serving (thumb): " + url)
             Response[Task](Status.SeeOther)
               .putHeaders(Header("Location", url))
+              .putHeaders(Header("Cache-Control", "max-age=3600"))
+        }
+      }
+
+    case request @ GET -> Root / "thumb-play" / uid =>
+      findThumb(request, uid, 24.hours) { info =>
+        val image = info.video.thumbs.image1280
+          .orElse(info.video.thumbs.base)
+
+        image match {
+          case None => notFound("video.thumbs.base")
+          case Some(url) =>
+            val urlPlay = "https://i.vimeocdn.com/filter/overlay?src0=" +
+              URLEncoder.encode(url, "utf-8") +
+              "&src1=https%3A%2F%2Ff.vimeocdn.com%2Fimages_v6%2Fshare%2Fplay_icon_overlay.png"
+
+            logger.info("Serving (thumb-play): " + urlPlay)
+            Response[Task](Status.SeeOther)
+              .putHeaders(Header("Location", urlPlay))
               .putHeaders(Header("Cache-Control", "max-age=3600"))
         }
       }
