@@ -17,34 +17,52 @@
 
 package org.alexn.vdp
 
+import io.circe.Decoder
 import monix.eval.Task
-import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, WebError}
+import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VideoConfigJSON, WebError}
 import org.http4s.{Header, MediaType, Method, Status, Uri}
 import org.http4s.client.Client
 import org.http4s.headers.Accept
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.util.CaseInsensitiveString
 import org.slf4j.LoggerFactory
-
 import scala.concurrent.duration._
 
 final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[Task] {
-  private[this] val cache = Cached.unsafe[Either[WebError, DownloadLinksJSON]]()
+  private[this] val cache = Cached.unsafe[Either[WebError, AnyRef]]()
+
+  /**
+    * Request sample:
+    * [[https://player.vimeo.com/video/300015010/config]]
+    */
+  def getConfig(uid: String, exp: FiniteDuration, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VideoConfigJSON]] =
+    cache.getOrUpdate(uid + "/config/" + exp.toMillis.toString, exp, uncachedConfig(uid, agent, extra:_*))
+      .asInstanceOf[Task[Either[WebError, VideoConfigJSON]]]
 
   /**
     * Fetches the download links from Vimeo for a public video with the
     * given `uid` and for which the download is allowed (Plus accounts and up).
     */
   def getDownloadLinks(uid: String, exp: FiniteDuration, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] =
-    cache.getOrUpdate(uid + "/" + exp.toMillis.toString, exp, uncachedDownloadLinks(uid, agent, extra:_*))
+    cache.getOrUpdate(uid + "/links/" + exp.toMillis.toString, exp, uncachedDownloadLinks(uid, agent, extra:_*))
+      .asInstanceOf[Task[Either[WebError, DownloadLinksJSON]]]
 
-  private def uncachedDownloadLinks(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] = {
+  private def uncachedConfig(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VideoConfigJSON]] =
+    uncachedGET(uid, s"https://player.vimeo.com/video/$uid/config", agent, extra:_*)
+
+  private def uncachedDownloadLinks(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] =
+    uncachedGET(uid, s"https://vimeo.com/$uid?action=load_download_config", agent, extra:_*)
+
+  private def uncachedGET[T](uid: String, url: String, agent: Option[Header], extra: Option[Header]*)
+    (implicit T: Decoder[T]): Task[Either[WebError, T]] = {
+
     // For JSON deserialization
     import org.http4s.circe.CirceEntityDecoder._
 
     val base = Method.GET(
-      Uri.unsafeFromString(s"https://vimeo.com/$uid?action=load_download_config"),
-      Accept(MediaType.application.json))
+      Uri.unsafeFromString(url),
+      Accept(MediaType.application.json)
+    )
 
     base.flatMap { req =>
       val request = req
@@ -60,7 +78,7 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
 
       client.fetch(request) {
         case Status.Successful(r) if r.status.code == 200 =>
-          /*_*/r.attemptAs[DownloadLinksJSON]/*_*/.leftMap(e => JSONError(e.message)).value
+          /*_*/r.attemptAs[T]/*_*/.leftMap(e => JSONError(e.message)).value
 
         case r =>
           val contentType = r.headers.get(CaseInsensitiveString("Content-Type")).map(_.value)

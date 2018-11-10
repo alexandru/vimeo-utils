@@ -20,12 +20,13 @@ package org.alexn.vdp
 import io.circe.Printer
 import io.circe.syntax._
 import monix.eval.Task
-import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError}
+import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VideoConfigJSON, WebError}
 import org.http4s.circe.CirceInstances
 import org.http4s.{Header, HttpRoutes, Request, Response, Status}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.util.CaseInsensitiveString
 import org.slf4j.LoggerFactory
+
 import scala.concurrent.duration._
 
 final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
@@ -48,7 +49,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
 
             case Some(value) =>
               val url = cleanURL(value.downloadURL, download.getOrElse(true))
-              logger.info("Serving: " + url)
+              logger.info("Serving (video): " + url)
               Response[Task](Status.SeeOther)
                 .putHeaders(Header("Location", url))
                 .putHeaders(Header("Cache-Control", "no-cache"))
@@ -66,10 +67,41 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
           .putHeaders(Header("Cache-Control", "max-age=86400"))
         /*_*/
       }
+
+    case request @ GET -> Root / "thumb" / uid =>
+      findThumb(request, uid, 24.hours) { info =>
+        info.video.thumbs.base match {
+          case None => notFound("video.thumbs.base")
+          case Some(url) =>
+            logger.info("Serving (thumb): " + url)
+            Response[Task](Status.SeeOther)
+              .putHeaders(Header("Location", url))
+              .putHeaders(Header("Cache-Control", "max-age=3600"))
+        }
+      }
+  }
+
+  private def findThumb(request: Request[Task], uid: String, exp: FiniteDuration)
+    (f: VideoConfigJSON => Response[Task]): Task[Response[Task]] = {
+
+    find(request, f) { (agent, forwardedFor) =>
+      vimeo.getConfig(uid, exp, agent, forwardedFor)
+    }
   }
 
   private def findDownloads(request: Request[Task], uid: String, exp: FiniteDuration)
     (f: DownloadLinksJSON => Response[Task]) = {
+
+    find(request, f) { (agent, forwardedFor) =>
+      vimeo.getDownloadLinks(uid, exp, agent, forwardedFor)
+    }
+  }
+
+  type UserAgent = Header
+  type ForwardedFor = Header
+
+  private def find[T](request: Request[Task], f: T => Response[Task])
+    (generate: (Option[UserAgent], Option[ForwardedFor]) => Task[Either[WebError, T]]) = {
 
     System.realIP.flatMap { serverIP =>
       val agent = request.headers.get(CaseInsensitiveString("User-Agent"))
@@ -89,7 +121,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
           }
       }
 
-      vimeo.getDownloadLinks(uid, exp, agent, forwardedFor).map {
+      generate(agent, forwardedFor).map {
         case Left(HttpError(status, body, contentType)) =>
           // Core web-service triggered an HTTP error, mirroring it as is
           val r = Response[Task](Status.fromInt(status).right.get).withEntity(body)
