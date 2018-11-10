@@ -20,11 +20,11 @@ package org.alexn.vdp
 import io.circe.Decoder
 import monix.eval.Task
 import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VideoConfigJSON, WebError}
-import org.http4s.{Header, MediaType, Method, Status, Uri}
 import org.http4s.client.Client
-import org.http4s.headers.Accept
 import org.http4s.client.dsl.Http4sClientDsl
+import org.http4s.headers.Accept
 import org.http4s.util.CaseInsensitiveString
+import org.http4s.{Header, MediaType, Method, Status, Uri}
 import org.slf4j.LoggerFactory
 import scala.concurrent.duration._
 
@@ -48,15 +48,14 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
       .asInstanceOf[Task[Either[WebError, DownloadLinksJSON]]]
 
   private def uncachedConfig(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VideoConfigJSON]] =
-    uncachedGET(uid, s"https://player.vimeo.com/video/$uid/config", agent, extra:_*)
+    uncachedGET[VideoConfigJSON](uid, s"https://player.vimeo.com/video/$uid/config", agent, extra:_*)
 
   private def uncachedDownloadLinks(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] =
-    uncachedGET(uid, s"https://vimeo.com/$uid?action=load_download_config", agent, extra:_*)
+    uncachedGET[DownloadLinksJSON](uid, s"https://vimeo.com/$uid?action=load_download_config", agent, extra:_*)
 
   private def uncachedGET[T](uid: String, url: String, agent: Option[Header], extra: Option[Header]*)
-    (implicit T: Decoder[T]): Task[Either[WebError, T]] = {
+    (implicit ev: Decoder[T]): Task[Either[WebError, T]] = {
 
-    // For JSON deserialization
     import org.http4s.circe.CirceEntityDecoder._
 
     val base = Method.GET(
@@ -78,7 +77,7 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
 
       client.fetch(request) {
         case Status.Successful(r) if r.status.code == 200 =>
-          /*_*/r.attemptAs[T]/*_*/.leftMap(e => JSONError(e.message)).value
+          r.attemptAs[T].leftMap(e => JSONError(e.message)).value
 
         case r =>
           val contentType = r.headers.get(CaseInsensitiveString("Content-Type")).map(_.value)

@@ -68,6 +68,15 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
         /*_*/
       }
 
+    case request @ GET -> Root / "config" / uid =>
+      findThumb(request, uid, 1.hour) { info =>
+        /*_*/
+        import circe._
+        Response[Task](Status.Ok).withEntity(info.asJson)
+          .putHeaders(Header("Cache-Control", "max-age=3600"))
+        /*_*/
+      }
+
     case request @ GET -> Root / "thumb" / uid =>
       findThumb(request, uid, 24.hours) { info =>
         info.video.thumbs.base match {
