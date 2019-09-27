@@ -68,7 +68,7 @@ lazy val root = (project in file("."))
     }*/
 
     // For Heroku deployment
-    herokuAppName in Compile := "vimeo-downloads-plus"
+    herokuAppName in Compile := "vimeo-utils"
   )
 
 scalacOptions ++= Seq(
