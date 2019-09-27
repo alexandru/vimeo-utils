@@ -17,25 +17,26 @@
 
 package org.alexn.vdp
 
+import io.circe.Encoder
 import io.circe.syntax._
 import monix.eval.Task
-import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VimeoConfigJSON, WebError}
+import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, PicturesEntrySizeJSON, VimeoConfigJSON, WebError}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.util.CaseInsensitiveString
 import org.http4s.{Header, HttpRoutes, Request, Response, Status}
 import org.slf4j.LoggerFactory
+
 import scala.concurrent.duration._
 
 final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
+  val httpCacheExpiry = 1.day.toSeconds.toString
 
   lazy val routes = HttpRoutes.of[Task] {
     case GET -> Root =>
       Ok("Pong")
 
-    case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(
-          download
-        ) =>
+    case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(download) =>
       findDownloads(request, uid, 1.minute) { info =>
         if (info.allowDownloads) {
           val search = name.toLowerCase.trim
@@ -60,53 +61,49 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       }
 
     case request @ GET -> Root / "get" / uid =>
-      findDownloads(request, uid, 24.hours) { info =>
-        /*_*/
-
-        Response[Task](Status.Ok)
-          .withEntity(info.asJson)
-          .putHeaders(Header("Cache-Control", "max-age=86400"))
-        /*_*/
-      }
+      findDownloads(request, uid, 24.hours)(jsonToResponse)
 
     case request @ GET -> Root / "config" / uid =>
-      findThumbs(request, uid, 1.hour) { info =>
-        Response[Task](Status.Ok)
-          .withEntity(info.asJson)
-          .putHeaders(Header("Cache-Control", "max-age=3600"))
-      }
+      findThumbs(request, uid, 1.hour)(jsonToResponse)
 
-    case request @ GET -> Root / "thumb" / uid =>
-      findThumbs(request, uid, 1.hour) { info =>
-        info.pictures.sizes match {
-          case Nil =>
-            notFound("thumb/" + uid)
+    case request @ GET -> Root / "thumb" / uid :? MinWidth(minWidth) =>
+      thumbView(request, "thumb", uid, minWidth)(_.link)
 
-          case list =>
-            val url = list.maxBy(_.width).link
-            logger.info("Serving (thumb): " + url)
-            Response[Task](Status.SeeOther)
-              .putHeaders(Header("Location", url))
-              .putHeaders(Header("Cache-Control", "max-age=3600"))
-        }
-      }
-
-    case request @ GET -> Root / "thumb-play" / uid =>
-      findThumbs(request, uid, 1.hour) { info =>
-        info.pictures.sizes match {
-          case Nil =>
-            notFound("thumb-play/" + uid)
-
-          case list =>
-            val picture = list.maxBy(_.width)
-            val url = picture.linkWithPlayButton.getOrElse(picture.link)
-            logger.info("Serving (thumb-play): " + url)
-            Response[Task](Status.SeeOther)
-              .putHeaders(Header("Location", url))
-              .putHeaders(Header("Cache-Control", "max-age=3600"))
-        }
+    case request @ GET -> Root / "thumb-play" / uid :? MinWidth(minWidth) =>
+      thumbView(request, "thumb-play", uid, minWidth) { p =>
+        p.linkWithPlayButton.getOrElse(p.link)
       }
   }
+
+  private def thumbView(request: Request[Task], name: String, uid: String, minWidth: Option[Int])(
+    f: PicturesEntrySizeJSON => String
+  ) = {
+    findThumbs(request, uid, 1.hour) { info =>
+      info.pictures.sizes match {
+        case Nil =>
+          notFound(name + "/" + uid)
+
+        case list =>
+          val picture = minWidth match {
+            case None =>
+              list.maxBy(_.width)
+            case Some(w) =>
+              val sorted = list.sortBy(_.width)
+              sorted.find(_.width >= w).getOrElse(sorted.last)
+          }
+
+          val url = f(picture)
+          Response[Task](Status.SeeOther)
+            .putHeaders(Header("Location", url))
+            .putHeaders(Header("Cache-Control", "max-age=" + httpCacheExpiry))
+      }
+    }
+  }
+
+  private def jsonToResponse[A : Encoder](response: A): Response[Task] =
+    Response[Task](Status.Ok)
+      .withEntity(response.asJson)
+      .putHeaders(Header("Cache-Control", "max-age=" + httpCacheExpiry))
 
   private def findThumbs(
     request: Request[Task],
@@ -195,7 +192,10 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     }
 
   private object DownloadParam
-      extends OptionalQueryParamDecoderMatcher[Boolean]("download")
+    extends OptionalQueryParamDecoderMatcher[Boolean]("download")
+
+  private object MinWidth
+    extends OptionalQueryParamDecoderMatcher[Int]("width")
 
   private[this] def notFound(reason: String) = {
     logger.warn(s"Not Found: $reason")
