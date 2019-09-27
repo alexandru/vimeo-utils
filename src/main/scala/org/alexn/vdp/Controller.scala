@@ -95,7 +95,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
           val url = f(picture)
           Response[Task](Status.SeeOther)
             .putHeaders(Header("Location", url))
-            .putHeaders(Header("Cache-Control", "max-age=" + httpCacheExpiry))
+            .putHeaders(Header("Cache-Control", "public, max-age=" + httpCacheExpiry))
       }
     }
   }
@@ -103,7 +103,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
   private def jsonToResponse[A : Encoder](response: A): Response[Task] =
     Response[Task](Status.Ok)
       .withEntity(response.asJson)
-      .putHeaders(Header("Cache-Control", "max-age=" + httpCacheExpiry))
+      .putHeaders(Header("Cache-Control", "public, max-age=" + httpCacheExpiry))
 
   private def findThumbs(
     request: Request[Task],
