@@ -18,17 +18,21 @@
 package org.alexn.vdp
 
 import java.net.URLEncoder
-
 import io.circe.Printer
 import io.circe.syntax._
 import monix.eval.Task
-import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VideoConfigJSON, WebError}
-import org.http4s.circe.CirceInstances
-import org.http4s.{Header, HttpRoutes, Request, Response, Status}
+import org.alexn.vdp.models.{
+  DownloadLinksJSON,
+  HttpError,
+  JSONError,
+  VideoConfigJSON,
+  WebError
+}
+import org.http4s.circe.{CirceInstances, _}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.util.CaseInsensitiveString
+import org.http4s.{Header, HttpRoutes, Request, Response, Status}
 import org.slf4j.LoggerFactory
-
 import scala.concurrent.duration._
 
 final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
@@ -37,12 +41,14 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     case GET -> Root =>
       Ok("Pong")
 
-    case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(download) =>
+    case request @ GET -> Root / "redirect" / uid / name :? DownloadParam(
+          download
+        ) =>
       findDownloads(request, uid, 1.minute) { info =>
         if (info.allowDownloads) {
           val search = name.toLowerCase.trim
-          val file = info
-            .sourceFile.find(_.publicName.toLowerCase.trim == search)
+          val file = info.sourceFile
+            .find(_.publicName.toLowerCase.trim == search)
             .orElse(info.files.find(_.publicName.toLowerCase.trim == search))
 
           file match {
@@ -64,8 +70,9 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     case request @ GET -> Root / "get" / uid =>
       findDownloads(request, uid, 24.hours) { info =>
         /*_*/
-        import circe._
-        Response[Task](Status.Ok).withEntity(info.asJson)
+
+        Response[Task](Status.Ok)
+          .withEntity(info.asJson)
           .putHeaders(Header("Cache-Control", "max-age=86400"))
         /*_*/
       }
@@ -73,8 +80,9 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     case request @ GET -> Root / "config" / uid =>
       findThumb(request, uid, 1.hour) { info =>
         /*_*/
-        import circe._
-        Response[Task](Status.Ok).withEntity(info.asJson)
+
+        Response[Task](Status.Ok)
+          .withEntity(info.asJson)
           .putHeaders(Header("Cache-Control", "max-age=3600"))
         /*_*/
       }
@@ -114,16 +122,22 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       }
   }
 
-  private def findThumb(request: Request[Task], uid: String, exp: FiniteDuration)
-    (f: VideoConfigJSON => Response[Task]): Task[Response[Task]] = {
+  private def findThumb(
+    request: Request[Task],
+    uid: String,
+    exp: FiniteDuration
+  )(f: VideoConfigJSON => Response[Task]): Task[Response[Task]] = {
 
     find(request, f) { (agent, forwardedFor) =>
       vimeo.getConfig(uid, exp, agent, forwardedFor)
     }
   }
 
-  private def findDownloads(request: Request[Task], uid: String, exp: FiniteDuration)
-    (f: DownloadLinksJSON => Response[Task]) = {
+  private def findDownloads(
+    request: Request[Task],
+    uid: String,
+    exp: FiniteDuration
+  )(f: DownloadLinksJSON => Response[Task]) = {
 
     find(request, f) { (agent, forwardedFor) =>
       vimeo.getDownloadLinks(uid, exp, agent, forwardedFor)
@@ -133,13 +147,16 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
   type UserAgent = Header
   type ForwardedFor = Header
 
-  private def find[T](request: Request[Task], f: T => Response[Task])
-    (generate: (Option[UserAgent], Option[ForwardedFor]) => Task[Either[WebError, T]]) = {
+  private def find[T](request: Request[Task], f: T => Response[Task])(
+    generate: (Option[UserAgent],
+               Option[ForwardedFor]) => Task[Either[WebError, T]]
+  ) = {
 
     System.realIP.flatMap { serverIP =>
       val agent = request.headers.get(CaseInsensitiveString("User-Agent"))
       val currentForwardedFor =
-        request.headers.get(CaseInsensitiveString("X-Forwarded-For"))
+        request.headers
+          .get(CaseInsensitiveString("X-Forwarded-For"))
           .orElse(request.headers.get(CaseInsensitiveString("X-Client-IP")))
           .orElse(request.headers.get(CaseInsensitiveString("X-ProxyUser-Ip")))
 
@@ -148,7 +165,9 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
         case Some(proxyIP) =>
           currentForwardedFor match {
             case None =>
-              request.remoteAddr.map(ip => Header("X-Forwarded-For", ip + ", " + proxyIP))
+              request.remoteAddr.map(
+                ip => Header("X-Forwarded-For", ip + ", " + proxyIP)
+              )
             case Some(header) =>
               Some(Header("X-Forwarded-For", header.value + ", " + proxyIP))
           }
@@ -157,18 +176,21 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       generate(agent, forwardedFor).map {
         case Left(HttpError(status, body, contentType)) =>
           // Core web-service triggered an HTTP error, mirroring it as is
-          val r = Response[Task](Status.fromInt(status).right.get).withEntity(body)
+          val r =
+            Response[Task](Status.fromInt(status).right.get).withEntity(body)
           contentType.fold(r)(ct => r.putHeaders(Header("Content-Type", ct)))
 
         case Left(JSONError(msg)) =>
           // Exceptions was thrown somewhere, not good
           logger.warn("Core web service problem — {}", msg)
-          Response[Task](Status.BadGateway).withEntity("502 Bad Gateway (Vimeo)")
+          Response[Task](Status.BadGateway)
+            .withEntity("502 Bad Gateway (Vimeo)")
 
         case Left(error) =>
           // Exceptions was thrown somewhere, not good
           logger.warn("Unexpected error: {}", error.toString)
-          Response[Task](Status.InternalServerError).withEntity("500 Internal Server Error")
+          Response[Task](Status.InternalServerError)
+            .withEntity("500 Internal Server Error")
 
         case Right(info) =>
           f(info)
@@ -186,9 +208,10 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       url.replaceAll("[&]download[=]\\w+", "")
     }
 
-  private object DownloadParam extends OptionalQueryParamDecoderMatcher[Boolean]("download")
+  private object DownloadParam
+      extends OptionalQueryParamDecoderMatcher[Boolean]("download")
 
-  private[this] def notFound(reason: String)= {
+  private[this] def notFound(reason: String) = {
     logger.warn(s"Not Found: $reason")
     Response[Task](Status.NotFound).withEntity("404 Not Found")
   }
@@ -202,6 +225,7 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
 }
 
 object Controller {
+
   /** Builds a [[Controller]]. */
   def apply(vimeo: VimeoClient): Task[Controller] =
     Task(new Controller(vimeo))

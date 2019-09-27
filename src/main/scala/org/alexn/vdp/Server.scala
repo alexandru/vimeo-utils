@@ -17,6 +17,7 @@
 
 package org.alexn.vdp
 
+import cats.arrow.FunctionK
 import cats.effect.ConcurrentEffect
 import fs2.Stream
 import monix.eval.Task
@@ -26,20 +27,21 @@ import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.{AutoSlash, CORS, Logger}
-
-import scala.concurrent.ExecutionContext.global
+import monix.execution.Scheduler.Implicits.global
 
 object Server extends Http4sDsl[Task] {
 
   def stream(implicit F: ConcurrentEffect[Task]): Stream[Task, Nothing] = {
     for {
-      config     <- Stream.eval(AppConfig.loadFromEnv)
-      client     <- BlazeClientBuilder[Task](global).stream
-      vimeo      <- Stream.eval(VimeoClient(client))
+      config <- Stream.eval(AppConfig.loadFromEnv)
+      client <- BlazeClientBuilder[Task](global).stream
+      vimeo <- Stream.eval(VimeoClient(client))
       controller <- Stream.eval(Controller(vimeo))
-
-      // With Middlewares in place
-      httpApp = Logger(true, false)(CORS(AutoSlash(controller.routes)).orNotFound)
+A
+      // With middleware in place
+      httpApp = Logger(logHeaders = true, logBody = false, FunctionK.id[Task])(
+        CORS(AutoSlash(controller.routes)).orNotFound
+      )
 
       exitCode <- BlazeServerBuilder[Task]
         .bindHttp(config.http.port, config.http.host)

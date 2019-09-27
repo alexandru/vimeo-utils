@@ -1,6 +1,6 @@
-val Http4sVersion         = "0.20.0-M2"
-val CirceVersion          = "0.10.0"
-val MonixVersion          = "3.0.0-RC2"
+val Http4sVersion         = "0.20.11"
+val CirceVersion          = "0.11.1"
+val MonixVersion          = "3.0.0"
 val LogbackVersion        = "1.2.3"
 val TypesafeConfigVersion = "1.3.2"
 
