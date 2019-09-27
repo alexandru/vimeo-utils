@@ -35,7 +35,7 @@ object Server extends Http4sDsl[Task] {
     for {
       config <- Stream.eval(AppConfig.loadFromEnv)
       client <- BlazeClientBuilder[Task](global).stream
-      vimeo <- Stream.eval(VimeoClient(client))
+      vimeo <- Stream.eval(VimeoClient(client, config.vimeo))
       controller <- Stream.eval(Controller(vimeo))
 
       // With middleware in place

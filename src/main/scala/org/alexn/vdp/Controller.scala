@@ -17,18 +17,10 @@
 
 package org.alexn.vdp
 
-import java.net.URLEncoder
-import io.circe.Printer
 import io.circe.syntax._
 import monix.eval.Task
-import org.alexn.vdp.models.{
-  DownloadLinksJSON,
-  HttpError,
-  JSONError,
-  VideoConfigJSON,
-  WebError
-}
-import org.http4s.circe.{CirceInstances, _}
+import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VimeoConfigJSON, WebError}
+import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.util.CaseInsensitiveString
 import org.http4s.{Header, HttpRoutes, Request, Response, Status}
@@ -78,23 +70,20 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       }
 
     case request @ GET -> Root / "config" / uid =>
-      findThumb(request, uid, 1.hour) { info =>
-        /*_*/
-
+      findThumbs(request, uid, 1.hour) { info =>
         Response[Task](Status.Ok)
           .withEntity(info.asJson)
           .putHeaders(Header("Cache-Control", "max-age=3600"))
-        /*_*/
       }
 
     case request @ GET -> Root / "thumb" / uid =>
-      findThumb(request, uid, 24.hours) { info =>
-        val image = info.video.thumbs.image1280
-          .orElse(info.video.thumbs.base)
+      findThumbs(request, uid, 1.hour) { info =>
+        info.pictures.sizes match {
+          case Nil =>
+            notFound("thumb/" + uid)
 
-        image match {
-          case None => notFound("video.thumbs.base")
-          case Some(url) =>
+          case list =>
+            val url = list.maxBy(_.width).link
             logger.info("Serving (thumb): " + url)
             Response[Task](Status.SeeOther)
               .putHeaders(Header("Location", url))
@@ -103,33 +92,30 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
       }
 
     case request @ GET -> Root / "thumb-play" / uid =>
-      findThumb(request, uid, 24.hours) { info =>
-        val image = info.video.thumbs.image1280
-          .orElse(info.video.thumbs.base)
+      findThumbs(request, uid, 1.hour) { info =>
+        info.pictures.sizes match {
+          case Nil =>
+            notFound("thumb-play/" + uid)
 
-        image match {
-          case None => notFound("video.thumbs.base")
-          case Some(url) =>
-            val urlPlay = "https://i.vimeocdn.com/filter/overlay?src0=" +
-              URLEncoder.encode(url, "utf-8") +
-              "&src1=https%3A%2F%2Ff.vimeocdn.com%2Fimages_v6%2Fshare%2Fplay_icon_overlay.png"
-
-            logger.info("Serving (thumb-play): " + urlPlay)
+          case list =>
+            val picture = list.maxBy(_.width)
+            val url = picture.linkWithPlayButton.getOrElse(picture.link)
+            logger.info("Serving (thumb-play): " + url)
             Response[Task](Status.SeeOther)
-              .putHeaders(Header("Location", urlPlay))
+              .putHeaders(Header("Location", url))
               .putHeaders(Header("Cache-Control", "max-age=3600"))
         }
       }
   }
 
-  private def findThumb(
+  private def findThumbs(
     request: Request[Task],
     uid: String,
     exp: FiniteDuration
-  )(f: VideoConfigJSON => Response[Task]): Task[Response[Task]] = {
+  )(f: VimeoConfigJSON => Response[Task]): Task[Response[Task]] = {
 
     find(request, f) { (agent, forwardedFor) =>
-      vimeo.getConfig(uid, exp, agent, forwardedFor)
+      vimeo.getPictures(uid, exp, agent, forwardedFor)
     }
   }
 
@@ -215,10 +201,6 @@ final class Controller private (vimeo: VimeoClient) extends Http4sDsl[Task] {
     logger.warn(s"Not Found: $reason")
     Response[Task](Status.NotFound).withEntity("404 Not Found")
   }
-
-  // For JSON encoding
-  private lazy val circe =
-    CirceInstances.withPrinter(Printer.spaces2)
 
   private[this] val logger =
     LoggerFactory.getLogger(getClass)

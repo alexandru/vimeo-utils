@@ -24,10 +24,30 @@ import monix.eval.Task
 /**
   * Global application config.
   */
-final case class AppConfig(
-  configSource: ConfigSource,
-  http: HttpConfig
-)
+final case class AppConfig(configSource: ConfigSource,
+                           http: HttpConfig,
+                           vimeo: VimeoConfig)
+
+/**
+  * Address for the server to listen for incoming connections.
+  */
+final case class HttpConfig(host: String, port: Int)
+
+/**
+  * Configuration for Vimeo's API.
+  */
+final case class VimeoConfig(accessToken: String)
+
+/**
+  * Indicates the source from where the Typesafe Config must be loaded.
+  */
+sealed trait ConfigSource
+
+object ConfigSource {
+  case class Resource(name: String) extends ConfigSource
+  case class Path(name: String) extends ConfigSource
+  case object Unknown extends ConfigSource
+}
 
 object AppConfig {
   def loadFromEnv: Task[AppConfig] =
@@ -42,6 +62,9 @@ object AppConfig {
       http = HttpConfig(
         host = config.getString("http.host"),
         port = config.getInt("http.port")
+      ),
+      vimeo = VimeoConfig(
+        accessToken = config.getString("vimeo.accessToken")
       )
     )
   }
@@ -79,22 +102,3 @@ object AppConfig {
     (source, config.withFallback(default))
   }
 }
-
-/**
-  * Indicates the source from where the Typesafe Config must be loaded.
-  */
-sealed trait ConfigSource
-
-object ConfigSource {
-  case class Resource(name: String) extends ConfigSource
-  case class Path(name: String) extends ConfigSource
-  case object Unknown extends ConfigSource
-}
-
-/**
-  * Address for the server to listen for incoming connections.
-  */
-final case class HttpConfig(
-  host: String,
-  port: Int
-)

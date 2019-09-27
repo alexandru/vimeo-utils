@@ -1,7 +1,9 @@
-# vimeo-download-plus
+# vimeo-utils
 
-A server implementation that redirects to a Vimeo raw video that was uploaded
-by a Plus account.
+A server implementation that:
+ 
+1. redirects to a Vimeo raw video that was uploaded by a Plus account
+2. returns video thumbnails
 
 Don't abuse.
 
@@ -40,7 +42,7 @@ dpkg -i ./target/oriel-cmp-backend_0.0.1_all.deb
 
 ## LICENSE 
 
-    Copyright (C) 2018  Alexandru Nedelcu
+    Copyright (C) 2019  Alexandru Nedelcu
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

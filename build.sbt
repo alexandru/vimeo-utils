@@ -3,6 +3,7 @@ val CirceVersion          = "0.11.1"
 val MonixVersion          = "3.0.0"
 val LogbackVersion        = "1.2.3"
 val TypesafeConfigVersion = "1.3.4"
+val SpymemcachedVersion   = "2.12.3"
 
 lazy val root = (project in file("."))
   .enablePlugins(AutomateHeaderPlugin)
@@ -11,8 +12,8 @@ lazy val root = (project in file("."))
   .enablePlugins(DebianPlugin)
   .settings(
     organization := "org.alexn",
-    name := "vimeo-download-plus",
-    version := "0.0.3",
+    name := "vimeo-utils",
+    version := "0.0.4",
     scalaVersion := "2.12.10",
     scalacOptions ++= Seq("-Ypartial-unification"),
     libraryDependencies ++= Seq(
@@ -25,7 +26,8 @@ lazy val root = (project in file("."))
       "io.circe"       %% "circe-parser"         % CirceVersion,
       "io.monix"       %% "monix"                % MonixVersion,
       "ch.qos.logback" %  "logback-classic"      % LogbackVersion,
-      "com.typesafe"   %  "config"               % TypesafeConfigVersion
+      "com.typesafe"   %  "config"               % TypesafeConfigVersion,
+      "net.spy"        % "spymemcached"          % SpymemcachedVersion
     ),
     addCompilerPlugin("org.spire-math" %% "kind-projector"     % "0.9.10"),
     addCompilerPlugin("com.olegpy"     %% "better-monadic-for" % "0.3.1"),

@@ -19,25 +19,18 @@ package org.alexn.vdp
 
 import io.circe.Decoder
 import monix.eval.Task
-import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VideoConfigJSON, WebError}
+import org.alexn.vdp.models.{DownloadLinksJSON, HttpError, JSONError, VimeoConfigJSON, VimeoConfig, WebError}
 import org.http4s.client.Client
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.headers.Accept
 import org.http4s.util.CaseInsensitiveString
 import org.http4s.{Header, MediaType, Method, Status, Uri}
 import org.slf4j.LoggerFactory
+
 import scala.concurrent.duration._
 
-final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[Task] {
+final class VimeoClient private (client: Client[Task], config: VimeoConfig) extends Http4sClientDsl[Task] {
   private[this] val cache = Cached.unsafe[Either[WebError, AnyRef]]()
-
-  /**
-    * Request sample:
-    * [[https://player.vimeo.com/video/300015010/config]]
-    */
-  def getConfig(uid: String, exp: FiniteDuration, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VideoConfigJSON]] =
-    cache.getOrUpdate(uid + "/config/" + exp.toMillis.toString, exp, uncachedConfig(uid, agent, extra:_*))
-      .asInstanceOf[Task[Either[WebError, VideoConfigJSON]]]
 
   /**
     * Fetches the download links from Vimeo for a public video with the
@@ -47,8 +40,15 @@ final class VimeoClient private (client: Client[Task]) extends Http4sClientDsl[T
     cache.getOrUpdate(uid + "/links/" + exp.toMillis.toString, exp, uncachedDownloadLinks(uid, agent, extra:_*))
       .asInstanceOf[Task[Either[WebError, DownloadLinksJSON]]]
 
-  private def uncachedConfig(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VideoConfigJSON]] =
-    uncachedGET[VideoConfigJSON](uid, s"https://player.vimeo.com/video/$uid/config", agent, extra:_*)
+  /**
+    * Fetches thumbnail links.
+    */
+  def getPictures(uid: String, exp: FiniteDuration, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VimeoConfigJSON]] =
+    cache.getOrUpdate(uid + "/pictures/" + exp.toMillis.toString, exp, uncachedPictures(uid, agent, extra:_*))
+      .asInstanceOf[Task[Either[WebError, VimeoConfigJSON]]]
+
+  private def uncachedPictures(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, VimeoConfigJSON]] =
+    uncachedGET[VimeoConfigJSON](uid, s"https://api.vimeo.com/videos/$uid?access_token=${config.accessToken}&per_page=100", agent, extra:_*)
 
   private def uncachedDownloadLinks(uid: String, agent: Option[Header], extra: Option[Header]*): Task[Either[WebError, DownloadLinksJSON]] =
     uncachedGET[DownloadLinksJSON](uid, s"https://vimeo.com/$uid?action=load_download_config", agent, extra:_*)
@@ -99,6 +99,6 @@ object VimeoClient {
   /**
     * Builds a [[VimeoClient]] resource.
     */
-  def apply(client: Client[Task]): Task[VimeoClient] =
-    Task(new VimeoClient(client))
+  def apply(client: Client[Task], config: VimeoConfig): Task[VimeoClient] =
+    Task(new VimeoClient(client, config))
 }
