@@ -8,4 +8,4 @@ addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.0.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.9")
 
 // For Heroku distribution
-addSbtPlugin("com.heroku" % "sbt-heroku" % "2.1.0")
+addSbtPlugin("com.heroku" % "sbt-heroku" % "2.1.2")
