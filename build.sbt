@@ -2,7 +2,7 @@ val Http4sVersion         = "0.20.11"
 val CirceVersion          = "0.11.1"
 val MonixVersion          = "3.0.0"
 val LogbackVersion        = "1.2.3"
-val TypesafeConfigVersion = "1.3.2"
+val TypesafeConfigVersion = "1.3.4"
 
 lazy val root = (project in file("."))
   .enablePlugins(AutomateHeaderPlugin)
@@ -13,7 +13,7 @@ lazy val root = (project in file("."))
     organization := "org.alexn",
     name := "vimeo-download-plus",
     version := "0.0.3",
-    scalaVersion := "2.12.7",
+    scalaVersion := "2.12.10",
     scalacOptions ++= Seq("-Ypartial-unification"),
     libraryDependencies ++= Seq(
       "org.http4s"     %% "http4s-blaze-server"  % Http4sVersion,
@@ -25,13 +25,10 @@ lazy val root = (project in file("."))
       "io.circe"       %% "circe-parser"         % CirceVersion,
       "io.monix"       %% "monix"                % MonixVersion,
       "ch.qos.logback" %  "logback-classic"      % LogbackVersion,
-      "com.typesafe"   %  "config"               % TypesafeConfigVersion,
-      // TODO: remove in the future
-      // https://github.com/http4s/http4s/issues/2259#issuecomment-437152483
-      "org.http4s"     %% "blaze-http"           % "0.14.0-M11"
+      "com.typesafe"   %  "config"               % TypesafeConfigVersion
     ),
-    addCompilerPlugin("org.spire-math" %% "kind-projector"     % "0.9.6"),
-    addCompilerPlugin("com.olegpy"     %% "better-monadic-for" % "0.2.4"),
+    addCompilerPlugin("org.spire-math" %% "kind-projector"     % "0.9.10"),
+    addCompilerPlugin("com.olegpy"     %% "better-monadic-for" % "0.3.1"),
     // Macro enhancements, soon to be integrated in the Scala compiler
     // (in the future 2.13 version)
     addCompilerPlugin(
@@ -41,7 +38,7 @@ lazy val root = (project in file("."))
 
     // For automatic headers, enabled by sbt-header
     headerLicense := Some(HeaderLicense.Custom(
-      """|Copyright (c) 2018 Alexandru Nedelcu.
+      """|Copyright (c) 2019 Alexandru Nedelcu.
          |
          |This program is free software: you can redistribute it and/or modify
          |it under the terms of the GNU General Public License as published by

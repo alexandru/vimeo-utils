@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Alexandru Nedelcu.
+ * Copyright (c) 2019 Alexandru Nedelcu.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ object Server extends Http4sDsl[Task] {
       client <- BlazeClientBuilder[Task](global).stream
       vimeo <- Stream.eval(VimeoClient(client))
       controller <- Stream.eval(Controller(vimeo))
-A
+
       // With middleware in place
       httpApp = Logger(logHeaders = true, logBody = false, FunctionK.id[Task])(
         CORS(AutoSlash(controller.routes)).orNotFound

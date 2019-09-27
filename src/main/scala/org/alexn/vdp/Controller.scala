@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Alexandru Nedelcu.
+ * Copyright (c) 2019 Alexandru Nedelcu.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
